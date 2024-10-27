@@ -1,0 +1,97 @@
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, ContextTypes
+import sqlite3
+import time
+
+# Set up database
+conn = sqlite3.connect("game_data.db")
+cursor = conn.cursor()
+
+# Create user table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    coins INTEGER DEFAULT 0,
+    pph INTEGER DEFAULT 0,
+    referral_count INTEGER DEFAULT 0,
+    last_claim TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
+conn.commit()
+
+# Initialize bot with the API key
+updater = Updater("7961251711:AAGbMiUQPq6E2Gcgn4O-_h9VXSV5A2WTCdQ", use_context=True)
+
+# Handle /start command and initialize user
+def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    cursor.execute("INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)", 
+                   (user.id, user.username))
+    conn.commit()
+    
+    update.message.reply_text("Welcome to the mini-game! Loading...")
+
+    # After showing loading message, go to home screen
+    time.sleep(2)
+    show_home_screen(update, context, user.id)
+
+# Display home screen
+def show_home_screen(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id):
+    cursor.execute("SELECT username, coins, pph FROM users WHERE user_id=?", (user_id,))
+    user_data = cursor.fetchone()
+    username = user_data[0] if user_data[0] else "User"
+    coins = user_data[1]
+    pph = user_data[2]
+    
+    # Create the layout for the home screen
+    keyboard = [
+        [InlineKeyboardButton("Tap for Coin 💰", callback_data="tap_coin")],
+        [InlineKeyboardButton("Home", callback_data="home"),
+         InlineKeyboardButton("Cards", callback_data="cards"),
+         InlineKeyboardButton("Tasks", callback_data="tasks"),
+         InlineKeyboardButton("Invite", callback_data="invite"),
+         InlineKeyboardButton("Airdrop", callback_data="airdrop")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    update.message.reply_text(
+        f"👤 Profile: {username}\n"
+        f"💰 Coins: {coins}\n"
+        f"⚙️ PPH: {pph}\n",
+        reply_markup=reply_markup
+    )
+
+# Handle button presses
+def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    query.answer()
+
+    if query.data == "tap_coin":
+        # Increase coins and update home page
+        cursor.execute("UPDATE users SET coins = coins + 1 WHERE user_id=?", (user_id,))
+        conn.commit()
+        show_home_screen(update, context, user_id)
+    elif query.data == "cards":
+        # Future implementation
+        query.edit_message_text(text="Cards page coming soon.")
+    elif query.data == "tasks":
+        # Future implementation
+        query.edit_message_text(text="Tasks page coming soon.")
+    elif query.data == "invite":
+        # Future implementation
+        query.edit_message_text(text="Invite page coming soon.")
+    elif query.data == "airdrop":
+        # Future implementation
+        query.edit_message_text(text="Airdrop page coming soon.")
+    else:
+        show_home_screen(update, context, user_id)
+
+# Set up handlers
+updater.dispatcher.add_handler(CommandHandler("start", start))
+updater.dispatcher.add_handler(CallbackQueryHandler(button))
+
+# Start polling
+updater.start_polling()
+updater.idle()
